@@ -35,21 +35,28 @@ Slopsmith builds that predate the notation format.
 - **No repeats** — da capo, segno, repeat barlines are not expanded.
 - **Grace notes in audio** — appear in the notation score but not in the
   FluidSynth MIDI audio; principal note timing is unaffected.
+- **grace_slash unrendered** — slashed vs unslashed grace notes are recorded
+  (`grace_slash: true`) but no renderer acts on the distinction yet.
 - **No .mxl** — compressed MusicXML not supported; unzip before importing.
 
 ## Installation
 
 ### Development (slopsmith-src + OrbStack/Docker)
 
-Copy this directory into the `plugins/` folder of your slopsmith-src checkout
-and name it `musicxml_import`:
+Place this directory (named `musicxml_import`) inside a dedicated external
+plugins folder, then point Slopsmith at it via `docker-compose.override.yml`:
 
-```
-slopsmith-src/plugins/musicxml_import/
+```yaml
+# docker-compose.override.yml (not committed to slopsmith-src)
+services:
+  web:
+    volumes:
+      - ../slopsmith-plugins:/user-plugins
+    environment:
+      - SLOPSMITH_PLUGINS_DIR=/user-plugins
 ```
 
-The bind-mount in `docker-compose.yml` picks it up immediately — no rebuild
-needed.
+The plugin is picked up on the next `docker compose up` with no rebuild needed.
 
 ### Slopsmith Desktop
 
