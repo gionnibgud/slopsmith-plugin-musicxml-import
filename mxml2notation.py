@@ -26,8 +26,14 @@ Known limitations
 from __future__ import annotations
 
 import io
+import json
 import logging
+import os
+import zipfile
+from math import gcd
 from xml.etree import ElementTree as ET
+
+import yaml
 
 log = logging.getLogger("slopsmith.plugin.musicxml_import")
 
@@ -603,6 +609,7 @@ def parse_musicxml(xml_bytes: bytes) -> dict:
     sections_out: list[dict] = []
     midi_notes: list[tuple[float, float, int, int]] = []
     max_time = 0.0
+    section_counters: dict[str, int] = {}
 
     # Tie tracking: (staff_id, voice_id, midi) -> True (open tie)
     tie_open: dict[tuple[str, str, int], bool] = {}
@@ -689,9 +696,12 @@ def parse_musicxml(xml_bytes: bytes) -> dict:
                 rehearsal = dt.find('rehearsal')
                 if rehearsal is not None and rehearsal.text:
                     r_time = _div_to_seconds(measure_abs_div_start, divisions, tempo_map)
+                    name = rehearsal.text.strip()
+                    section_counters[name] = section_counters.get(name, 0) + 1
                     sections_out.append({
                         'time': round(r_time, 4),
-                        'name': rehearsal.text.strip(),
+                        'name': name,
+                        'number': section_counters[name],
                     })
 
         # ── Walk notes ─────────────────────────────────────────────────────
@@ -771,7 +781,7 @@ def parse_musicxml(xml_bytes: bytes) -> dict:
 
             step = pitch_elem.findtext('step') or 'C'
             alter_text = pitch_elem.findtext('alter')
-            alter = int(float(alter_text)) if alter_text else 0
+            alter = round(float(alter_text)) if alter_text else 0
             octave = int(pitch_elem.findtext('octave') or '4')
             midi = max(0, min(127, _pitch_to_midi(step, alter, octave)))
 
@@ -862,14 +872,13 @@ def parse_musicxml(xml_bytes: bytes) -> dict:
                     grace_elem = elem.find('grace')
                     if grace_elem is not None and grace_elem.get('slash') == 'yes':
                         beat['grace_slash'] = True
-                # beat_pos uses 16th-note resolution: denominator = ts_beat_type * 4
-                # This gives exact placement for any standard duration (whole through 32nd).
-                pos_denom = ts_beat_type * 4
-                denom_unit = divisions * 4 // pos_denom  # divisions per 16th note
+                raw_denom = ts_beat_type * 4
+                denom_unit = divisions * 4 // raw_denom   # divisions per 16th note
                 if denom_unit > 0:
-                    pos_num = (note_div - measure_abs_div_start) // denom_unit
-                    if pos_num > 0:
-                        beat['beat_pos'] = [pos_num, pos_denom]
+                    raw_num = (note_div - measure_abs_div_start) // denom_unit
+                    if raw_num > 0:
+                        g = gcd(raw_num, raw_denom)
+                        beat['beat_pos'] = [raw_num // g, raw_denom // g]
                 beat.update(beat_effects)
                 beat['notes'] = [note_dict]
                 voice_beats.append(beat)
@@ -962,8 +971,10 @@ def parse_musicxml(xml_bytes: bytes) -> dict:
     song_timeline = {
         'version': 1,
         'beats': [{'time': b['time'], 'measure': b['measure']} for b in beats_deduped],
-        'sections': [{'time': s['time'], 'name': s['name']} for s in
-                     sorted(sections_out, key=lambda x: x['time'])],
+        'sections': [
+            {'time': s['time'], 'name': s['name'], 'number': s.get('number', 1)}
+            for s in sorted(sections_out, key=lambda x: x['time'])
+        ],
     }
 
     midi_bytes = _build_midi(midi_notes, tempo_map)
@@ -1039,12 +1050,6 @@ def build_sloppak_zip(
 
     Returns zip bytes.
     """
-    import json
-    import os
-    import zipfile
-
-    import yaml
-
     buf = io.BytesIO()
     duration = result['duration']
 

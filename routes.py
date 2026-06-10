@@ -18,25 +18,33 @@ import base64
 import json
 import os
 import re
+import shutil
 import tempfile
 from pathlib import Path
 
 from fastapi import WebSocket, WebSocketDisconnect
+
+try:
+    from gp2midi import render_midi_to_audio as _render_midi_to_audio
+except ImportError:
+    _render_midi_to_audio = None
 
 _get_dlc_dir = None
 _extract_meta = None
 _meta_db = None
 _config_dir = None
 _log = None
+_mxml = None
 
 
 def setup(app, context):
-    global _get_dlc_dir, _extract_meta, _meta_db, _config_dir, _log
+    global _get_dlc_dir, _extract_meta, _meta_db, _config_dir, _log, _mxml
     _get_dlc_dir = context['get_dlc_dir']
     _extract_meta = context['extract_meta']
     _meta_db = context['meta_db']
     _config_dir = context['config_dir']
     _log = context['log']
+    _mxml = context['load_sibling']('mxml2notation')
 
     @app.post('/api/plugins/musicxml_import/upload')
     async def upload_mxml(data: dict):
@@ -61,8 +69,7 @@ def setup(app, context):
         tmp_path.write_bytes(xml_bytes)
 
         try:
-            mxml = context['load_sibling']('mxml2notation')
-            result = mxml.parse_musicxml(xml_bytes)
+            result = _mxml.parse_musicxml(xml_bytes)
             return {
                 'title': result['title'],
                 'composer': result['composer'],
@@ -99,15 +106,15 @@ def setup(app, context):
         progress_queue: asyncio.Queue = asyncio.Queue()
 
         def _do_build():
+            tmp_midi_dir = None
+
             def report(stage: str, pct: int) -> None:
                 progress_queue.put_nowait({'stage': stage, 'progress': pct})
 
             try:
-                mxml = context['load_sibling']('mxml2notation')
-
                 report('Parsing MusicXML…', 10)
                 xml_bytes = Path(tmp_path).read_bytes()
-                result = mxml.parse_musicxml(xml_bytes)
+                result = _mxml.parse_musicxml(xml_bytes)
 
                 use_title = title.strip() or result['title']
                 use_composer = composer.strip() or result['composer']
@@ -118,23 +125,27 @@ def setup(app, context):
                     25,
                 )
 
-                tmp_midi = Path(tempfile.mkdtemp()) / 'score.mid'
+                tmp_midi_dir = Path(tempfile.mkdtemp())
+                tmp_midi = tmp_midi_dir / 'score.mid'
                 tmp_midi.write_bytes(result['midi_bytes'])
 
                 audio_path = None
                 audio_error = None
-                try:
-                    from gp2midi import render_midi_to_audio
-                    report('Rendering audio with FluidSynth…', 40)
-                    tmp_ogg_base = str(tmp_midi.parent / 'audio')
-                    audio_path = render_midi_to_audio(str(tmp_midi), tmp_ogg_base)
-                    report('Audio rendered.', 65)
-                except Exception as e:
-                    audio_error = str(e)
+                if _render_midi_to_audio is None:
+                    audio_error = 'gp2midi not available'
                     report(f'Audio skipped: {audio_error}', 65)
+                else:
+                    try:
+                        report('Rendering audio with FluidSynth…', 40)
+                        tmp_ogg_base = str(tmp_midi_dir / 'audio')
+                        audio_path = _render_midi_to_audio(str(tmp_midi), tmp_ogg_base)
+                        report('Audio rendered.', 65)
+                    except Exception as e:
+                        audio_error = str(e)
+                        report(f'Audio skipped: {audio_error}', 65)
 
                 report('Assembling sloppak…', 75)
-                sloppak_bytes = mxml.build_sloppak_zip(
+                sloppak_bytes = _mxml.build_sloppak_zip(
                     result, audio_path, use_title, use_composer
                 )
 
@@ -159,7 +170,7 @@ def setup(app, context):
                     stat = out_path.stat()
                     _meta_db.put(rel_name, stat.st_mtime, stat.st_size, meta)
                 except Exception:
-                    pass  # non-fatal
+                    _log.warning('metadata indexing failed for %r', out_name, exc_info=True)
 
                 msg = {
                     'done': True,
@@ -174,11 +185,17 @@ def setup(app, context):
                 progress_queue.put_nowait(msg)
 
             except Exception as e:
-                import traceback
-                traceback.print_exc()
+                _log.exception('build error')
                 progress_queue.put_nowait({'error': str(e)})
+            finally:
+                if tmp_midi_dir is not None:
+                    shutil.rmtree(tmp_midi_dir, ignore_errors=True)
+                try:
+                    shutil.rmtree(Path(tmp_path).parent, ignore_errors=True)
+                except Exception:
+                    pass
 
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         build_task = loop.run_in_executor(None, _do_build)
 
         try:

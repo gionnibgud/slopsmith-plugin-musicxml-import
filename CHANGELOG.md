@@ -14,11 +14,29 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   now use the primary beat unit (dotted quarter for 6/8, 9/8, 12/8) rather than
   the quarter note. `beat_groups` is written onto compound/irregular measure dicts;
   `beat_pos` is written onto every non-downbeat notation beat.
-- `beat_pos` resolution raised to 16th-note granularity (`ts_beat_type * 4`)
-  so notes at 8th and 16th positions within a measure have distinct values.
-  Previously the quarter-note denominator caused collisions for sub-beat notes.
+- `beat_pos` reduced to lowest terms via `gcd` — denominator is now `ts_beat_type`
+  or a simpler fraction (e.g. `[1, 4]` for beat 2 in 4/4, not `[4, 16]`).
 - Output filename no longer doubles the `_mxml` suffix when the title extracted
   from the MusicXML already ends with the word "mxml".
+- `song_timeline` sections now carry a `number` field (1-based per-name counter).
+  Previously all sections defaulted to repeat #0.
+- `alter` now uses `round()` instead of `int(float())` to avoid truncation of
+  near-integer MusicXML alter values from imprecise exporters.
+- `ws://` in `screen.js` replaced with a protocol-relative conditional (`wss`
+  on HTTPS deployments).
+- `load_sibling('mxml2notation')` resolved once at `setup()` time instead of
+  per-request.
+- `gp2midi` imported at module level with an `ImportError` fallback instead of
+  inside the build thread.
+- `asyncio.get_running_loop()` replaces deprecated `get_event_loop()`.
+- `traceback.print_exc()` replaced with `_log.exception()`.
+- Metadata indexing failure now logs a warning instead of silently passing.
+- MIDI and upload temp dirs cleaned up via `shutil.rmtree` in a `finally` block.
+
+### Added
+
+- `requirements` field in `plugin.json` (`midiutil`, `pyyaml`) for
+  self-installation outside the slopsmith container environment.
 
 ---
 

@@ -6,5 +6,6 @@
   "nav": { "label": "Import MusicXML", "screen": "plugin-musicxml_import" },
   "screen": "screen.html",
   "script": "screen.js",
-  "routes": "routes.py"
+  "routes": "routes.py",
+  "requirements": ["midiutil", "pyyaml"]
 }
