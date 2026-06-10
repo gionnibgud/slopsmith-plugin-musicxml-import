@@ -288,10 +288,6 @@ def _parse_ornaments(note_elem: ET.Element) -> dict:
         # Record as a text annotation; renderers that support trill rendering
         # can upgrade this field when alphaTab exposes the property.
         out['txt'] = 'tr'
-    if orn.find('wavy-line') is not None:
-        wl = orn.find('wavy-line')
-        if wl is not None and wl.get('type') == 'start':
-            out['vib'] = True
     return out
 
 
@@ -613,6 +609,8 @@ def parse_musicxml(xml_bytes: bytes) -> dict:
 
     # Tie tracking: (staff_id, voice_id, midi) -> True (open tie)
     tie_open: dict[tuple[str, str, int], bool] = {}
+    # Wavy-line (vibrato) span tracking: (staff_id, voice) -> True when open
+    vibrato_open: dict[tuple[str, str], bool] = {}
 
     for measure_elem in part.findall('measure'):
         measure_number = 1
@@ -848,6 +846,26 @@ def parse_musicxml(xml_bytes: bytes) -> dict:
                 beat_effects['cre'] = True
             if dec:
                 beat_effects['dec'] = True
+
+            # Wavy-line span detection — collect start/stop before applying
+            notations_elem = elem.find('notations')
+            wl_start = wl_stop = False
+            if notations_elem is not None:
+                orn_elem = notations_elem.find('ornaments')
+                if orn_elem is not None:
+                    for wl in orn_elem.findall('wavy-line'):
+                        wl_type = wl.get('type', '')
+                        if wl_type == 'start':
+                            wl_start = True
+                        elif wl_type == 'stop':
+                            wl_stop = True
+            if wl_start:
+                vibrato_open[(sid, voice)] = True
+            # Apply vib before closing so the stop note is included in the span
+            if vibrato_open.get((sid, voice)):
+                beat_effects['vib'] = True
+            if wl_stop:
+                vibrato_open.pop((sid, voice), None)
 
             # ── Chord vs new beat ──────────────────────────────────────────
             voice_beats = measure_beats[sid][voice]

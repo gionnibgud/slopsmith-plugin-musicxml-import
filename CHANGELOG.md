@@ -18,6 +18,10 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   or a simpler fraction (e.g. `[1, 4]` for beat 2 in 4/4, not `[4, 16]`).
 - Output filename no longer doubles the `_mxml` suffix when the title extracted
   from the MusicXML already ends with the word "mxml".
+- `<wavy-line>` vibrato now tracked as a span. Previously `vib: True` was
+  emitted only on the note carrying `<wavy-line type="start">`. Now a
+  `vibrato_open` tracker applies `vib: True` to every beat from start through
+  stop inclusive, including across measure boundaries.
 - `song_timeline` sections now carry a `number` field (1-based per-name counter).
   Previously all sections defaulted to repeat #0.
 - `alter` now uses `round()` instead of `int(float())` to avoid truncation of
