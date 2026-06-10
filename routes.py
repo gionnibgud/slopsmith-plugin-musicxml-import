@@ -139,6 +139,7 @@ def setup(app, context):
                 )
 
                 safe_t = re.sub(r'[<>:"/\\|?*\s]', '_', use_title)[:60]
+                safe_t = re.sub(r'_mxml$', '', safe_t, flags=re.IGNORECASE)
                 safe_a = re.sub(r'[<>:"/\\|?*\s]', '_', use_composer)[:40]
                 out_name = (
                     f'{safe_t}_{safe_a}_mxml.sloppak'

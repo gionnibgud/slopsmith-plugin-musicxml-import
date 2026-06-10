@@ -14,6 +14,11 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   now use the primary beat unit (dotted quarter for 6/8, 9/8, 12/8) rather than
   the quarter note. `beat_groups` is written onto compound/irregular measure dicts;
   `beat_pos` is written onto every non-downbeat notation beat.
+- `beat_pos` resolution raised to 16th-note granularity (`ts_beat_type * 4`)
+  so notes at 8th and 16th positions within a measure have distinct values.
+  Previously the quarter-note denominator caused collisions for sub-beat notes.
+- Output filename no longer doubles the `_mxml` suffix when the title extracted
+  from the MusicXML already ends with the word "mxml".
 
 ---
 

@@ -862,10 +862,14 @@ def parse_musicxml(xml_bytes: bytes) -> dict:
                     grace_elem = elem.find('grace')
                     if grace_elem is not None and grace_elem.get('slash') == 'yes':
                         beat['grace_slash'] = True
-                denom_unit = divisions * 4 // ts_beat_type
-                pos_in_denom_units = (note_div - measure_abs_div_start) // denom_unit
-                if pos_in_denom_units > 0:
-                    beat['beat_pos'] = [pos_in_denom_units, ts_beat_type]
+                # beat_pos uses 16th-note resolution: denominator = ts_beat_type * 4
+                # This gives exact placement for any standard duration (whole through 32nd).
+                pos_denom = ts_beat_type * 4
+                denom_unit = divisions * 4 // pos_denom  # divisions per 16th note
+                if denom_unit > 0:
+                    pos_num = (note_div - measure_abs_div_start) // denom_unit
+                    if pos_num > 0:
+                        beat['beat_pos'] = [pos_num, pos_denom]
                 beat.update(beat_effects)
                 beat['notes'] = [note_dict]
                 voice_beats.append(beat)
