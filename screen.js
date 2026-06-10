@@ -5,7 +5,8 @@
 
 const PLUGIN_ID = 'musicxml_import';
 const API_BASE  = `/api/plugins/${PLUGIN_ID}`;
-const WS_BASE   = `ws://${location.host}/ws/plugins/${PLUGIN_ID}`;
+const WS_PROTO  = location.protocol === 'https:' ? 'wss' : 'ws';
+const WS_BASE   = `${WS_PROTO}://${location.host}/ws/plugins/${PLUGIN_ID}`;
 
 let _tmpPath = null;
 

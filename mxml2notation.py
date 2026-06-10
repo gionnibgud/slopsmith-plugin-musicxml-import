@@ -31,7 +31,7 @@ import logging
 import os
 import re
 import zipfile
-from math import gcd
+
 from xml.etree import ElementTree as ET
 
 import yaml
@@ -963,13 +963,11 @@ def parse_musicxml(xml_bytes: bytes) -> dict:
                     grace_elem = elem.find('grace')
                     if grace_elem is not None and grace_elem.get('slash') == 'yes':
                         beat['grace_slash'] = True
-                raw_denom = ts_beat_type * 4
-                denom_unit = divisions * 4 // raw_denom   # divisions per 16th note
+                denom_unit = divisions * 4 // ts_beat_type  # divisions per ts-denominator note
                 if denom_unit > 0:
-                    raw_num = (note_div - measure_abs_div_start) // denom_unit
-                    if raw_num > 0:
-                        g = gcd(raw_num, raw_denom)
-                        beat['beat_pos'] = [raw_num // g, raw_denom // g]
+                    pos_num = (note_div - measure_abs_div_start) // denom_unit
+                    if pos_num > 0:
+                        beat['beat_pos'] = [pos_num, ts_beat_type]
                 beat.update(beat_effects)
                 beat['notes'] = [note_dict]
                 voice_beats.append(beat)

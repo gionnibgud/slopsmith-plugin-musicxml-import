@@ -10,12 +10,17 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- `beat_pos` denominator now correctly uses `ts_beat_type` (the time-signature
+  denominator) as required by the spec. In 6/8, beat 2 is `[3, 8]` not `[3, 32]`.
+  Unused `gcd` import removed.
+- `upload_mxml` parse-failure path now cleans up the temp directory before
+  returning the error response.
+- `ws://` in `screen.js` replaced with a protocol-relative conditional (`wss`
+  on HTTPS deployments).
 - Compound and irregular meter beat emission. Beat ticks in `song_timeline.json`
   now use the primary beat unit (dotted quarter for 6/8, 9/8, 12/8) rather than
   the quarter note. `beat_groups` is written onto compound/irregular measure dicts;
   `beat_pos` is written onto every non-downbeat notation beat.
-- `beat_pos` reduced to lowest terms via `gcd` — denominator is now `ts_beat_type`
-  or a simpler fraction (e.g. `[1, 4]` for beat 2 in 4/4, not `[4, 16]`).
 - Output filename no longer doubles the `_mxml` suffix when the title extracted
   from the MusicXML already ends with the word "mxml".
 - `<direction>` elements appearing after their target note (post-annotation
@@ -32,8 +37,6 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   Previously all sections defaulted to repeat #0.
 - `alter` now uses `round()` instead of `int(float())` to avoid truncation of
   near-integer MusicXML alter values from imprecise exporters.
-- `ws://` in `screen.js` replaced with a protocol-relative conditional (`wss`
-  on HTTPS deployments).
 - `load_sibling('mxml2notation')` resolved once at `setup()` time instead of
   per-request.
 - `gp2midi` imported at module level with an `ImportError` fallback instead of

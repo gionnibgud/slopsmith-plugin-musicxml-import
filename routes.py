@@ -80,6 +80,7 @@ def setup(app, context):
             }
         except Exception as e:
             _log.exception('MusicXML parse error')
+            shutil.rmtree(tmp_dir, ignore_errors=True)
             return {'error': f'Failed to parse: {e}'}
 
     @app.websocket('/ws/plugins/musicxml_import/build')
