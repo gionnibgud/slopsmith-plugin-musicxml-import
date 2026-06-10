@@ -63,9 +63,11 @@ def setup(app, context):
         except Exception:
             return {'error': 'Invalid base64 data'}
 
-        # Save to temp for the build step
+        # Use a sanitised filename in the temp dir to avoid spaces
+        # being mis-decoded as '+' when passed as a WS query parameter.
+        safe_filename = re.sub(r'[^a-zA-Z0-9._-]', '_', filename)
         tmp_dir = Path(tempfile.mkdtemp())
-        tmp_path = tmp_dir / filename
+        tmp_path = tmp_dir / safe_filename
         tmp_path.write_bytes(xml_bytes)
 
         try:
