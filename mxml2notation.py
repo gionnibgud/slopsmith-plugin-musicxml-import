@@ -29,6 +29,7 @@ import io
 import json
 import logging
 import os
+import re
 import zipfile
 from math import gcd
 from xml.etree import ElementTree as ET
@@ -36,6 +37,70 @@ from xml.etree import ElementTree as ET
 import yaml
 
 log = logging.getLogger("slopsmith.plugin.musicxml_import")
+
+# ---------------------------------------------------------------------------
+# Instrument inference
+# ---------------------------------------------------------------------------
+
+_INSTRUMENT_SYNONYMS: dict[str, str] = {
+    # Piano family
+    'piano': 'piano', 'pianoforte': 'piano', 'grand piano': 'piano',
+    'upright piano': 'piano', 'keyboard': 'piano', 'keys': 'piano',
+    'electric piano': 'piano', 'digital piano': 'piano',
+    'harpsichord': 'piano', 'clavichord': 'piano', 'celesta': 'piano',
+    'organ': 'organ', 'pipe organ': 'organ', 'hammond': 'organ',
+    # Strings
+    'violin': 'violin', 'viola': 'viola',
+    'cello': 'cello', 'violoncello': 'cello',
+    'double bass': 'double_bass', 'contrabass': 'double_bass',
+    'bass': 'double_bass',
+    'harp': 'harp',
+    # Woodwinds
+    'flute': 'flute', 'piccolo': 'flute',
+    'oboe': 'oboe', 'cor anglais': 'oboe', 'english horn': 'oboe',
+    'clarinet': 'clarinet', 'bass clarinet': 'clarinet',
+    'bassoon': 'bassoon', 'contrabassoon': 'bassoon',
+    'saxophone': 'saxophone', 'alto sax': 'saxophone',
+    'tenor sax': 'saxophone', 'soprano sax': 'saxophone',
+    # Brass
+    'trumpet': 'trumpet', 'cornet': 'trumpet',
+    'french horn': 'horn', 'horn': 'horn',
+    'trombone': 'trombone', 'bass trombone': 'trombone',
+    'tuba': 'tuba',
+    # Plucked
+    'guitar': 'guitar', 'electric guitar': 'guitar',
+    'acoustic guitar': 'guitar', 'classical guitar': 'guitar',
+    'bass guitar': 'bass_guitar',
+    'ukulele': 'ukulele', 'banjo': 'banjo', 'mandolin': 'mandolin',
+    # Percussion / voice
+    'drums': 'drums', 'drum kit': 'drums', 'percussion': 'percussion',
+    'voice': 'voice', 'vocals': 'voice', 'soprano': 'voice',
+    'mezzo': 'voice', 'alto': 'voice', 'tenor': 'voice',
+    'baritone': 'voice', 'bass voice': 'voice',
+    'choir': 'voice', 'chorus': 'voice',
+}
+
+_PIANO_FAMILY: set[str] = {'piano', 'organ', 'harpsichord', 'celesta', 'clavichord'}
+
+
+def _infer_instrument(part_name: str) -> str:
+    """Infer instrument identifier from a MusicXML part name.
+
+    Matches the part name (case-insensitive, stripped) against known
+    synonyms. Returns a canonical instrument string (e.g. 'piano',
+    'violin') or 'unknown' when no match is found.
+    """
+    normalised = part_name.strip().lower()
+    if normalised in _INSTRUMENT_SYNONYMS:
+        return _INSTRUMENT_SYNONYMS[normalised]
+    matches = [
+        (key, val) for key, val in _INSTRUMENT_SYNONYMS.items()
+        if key in normalised
+    ]
+    if matches:
+        return max(matches, key=lambda kv: len(kv[0]))[1]
+    return 'unknown'
+
 
 # ---------------------------------------------------------------------------
 # Pitch helpers
@@ -572,6 +637,8 @@ def parse_musicxml(xml_bytes: bytes) -> dict:
             name = sp.findtext('part-name') or sp.get('id') or 'Part'
             part_names.append(name)
 
+    instrument = _infer_instrument(part_names[0]) if part_names else 'unknown'
+
     # ── Tempo map ───────────────────────────────────────────────────────────
     tempo_map = _build_tempo_map(root)
 
@@ -976,17 +1043,25 @@ def parse_musicxml(xml_bytes: bytes) -> dict:
     _STAFF_LABELS = {'rh': 'Right Hand', 'lh': 'Left Hand'}
     ordered_staves = [s for s in _STAFF_ORDER if s in staves_def]
     ordered_staves += sorted(s for s in staves_def if s not in _STAFF_ORDER)
-    staves_list = [
-        {'id': sid, 'clef': staves_def[sid], 'label': _STAFF_LABELS.get(sid, sid)}
-        for sid in ordered_staves
-    ]
+    arr_name = re.sub(r'[^a-z0-9]', '_', instrument).replace('_', ' ').title()
+    if len(ordered_staves) == 1 and instrument not in _PIANO_FAMILY:
+        staves_list = [
+            {'id': ordered_staves[0], 'clef': staves_def[ordered_staves[0]],
+             'label': arr_name}
+        ]
+    else:
+        staves_list = [
+            {'id': sid, 'clef': staves_def[sid],
+             'label': _STAFF_LABELS.get(sid, sid)}
+            for sid in ordered_staves
+        ]
 
     duration = round(max_time + 0.5, 2) if max_time > 0 else 30.0
 
     # ── Notation payload ────────────────────────────────────────────────────
     notation = {
         'version': 1,
-        'instrument': 'piano',
+        'instrument': instrument,
         'staves': staves_list,
         'measures': measures_out,
     }
@@ -1007,6 +1082,7 @@ def parse_musicxml(xml_bytes: bytes) -> dict:
         'title': (title.strip() or 'Untitled'),
         'composer': composer.strip(),
         'duration': duration,
+        'instrument': instrument,
         'notation': notation,
         'song_timeline': song_timeline,
         'midi_bytes': midi_bytes,
@@ -1077,6 +1153,11 @@ def build_sloppak_zip(
     buf = io.BytesIO()
     duration = result['duration']
 
+    instrument = result.get('instrument', 'unknown')
+    arr_id = re.sub(r'[^a-z0-9]', '_', instrument)
+    notation_filename = f'notation_{arr_id}.json'
+    arr_name = arr_id.replace('_', ' ').title()
+
     manifest: dict = {
         'title': title,
         'artist': composer or 'Unknown',
@@ -1085,10 +1166,10 @@ def build_sloppak_zip(
         'duration': duration,
         'arrangements': [
             {
-                'id': 'keys',
-                'name': 'Keys',
-                'type': 'piano',
-                'notation': 'notation_keys.json',
+                'id': arr_id,
+                'name': arr_name,
+                'type': instrument,
+                'notation': notation_filename,
                 # file: intentionally omitted — loader supports this when
                 # notation: is present (feat/notation-format branch).
             }
@@ -1107,7 +1188,7 @@ def build_sloppak_zip(
             yaml.safe_dump(manifest, allow_unicode=True, sort_keys=False),
         )
         zf.writestr(
-            'notation_keys.json',
+            notation_filename,
             json.dumps(result['notation'], separators=(',', ':')),
         )
         zf.writestr(

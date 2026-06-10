@@ -47,6 +47,12 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 - `requirements` field in `plugin.json` (`midiutil`, `pyyaml`) for
   self-installation outside the slopsmith container environment.
+- Instrument inference from MusicXML part name (`_infer_instrument()` with a
+  synonym table covering piano, organ, strings, woodwinds, brass, plucked, and
+  voice families; longest-key-wins substring fallback; returns `'unknown'` for
+  unrecognised names). Arrangement `id`, `name`, `type`, and notation filename
+  are now derived from the inferred instrument. Single-staff non-piano
+  instruments use the instrument name as the staff label.
 
 ---
 
