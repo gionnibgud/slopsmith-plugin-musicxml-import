@@ -18,10 +18,9 @@ Known limitations
   distinction can act on it when alphaTab exposes the API.
 - No repeats / da capo / segno expansion — each measure plays once.
 - No .mxl (compressed MusicXML — unzip before importing).
-- Compound meters (6/8, 12/8) are imported correctly for note data but
-  beat emission uses quarter-note resolution throughout (schema v1
-  limitation — beat-unit for compound meters is a dotted quarter, not
-  expressible as a single dur integer).
+- Compound (6/8, 9/8, 12/8) and common irregular (5/8, 7/8) meters emit
+  primary beats at the dotted-quarter / group unit. More exotic irregular
+  meters fall back to quarter-note resolution.
 """
 
 from __future__ import annotations
@@ -477,6 +476,28 @@ def _clef_string(sign: str, line: str) -> str:
     return 'neutral'
 
 
+def _beat_groups(ts_beats: int, ts_beat_type: int) -> list[int] | None:
+    """Return primary beat groups for compound/irregular meters, or None for simple.
+
+    Simple (denominator ≤ 4, or denom ≥ 8 with numerator not divisible by 3): None.
+    Compound (denom ≥ 8, numerator divisible by 3, numerator ≥ 6): list of 3s.
+    Irregular (denom ≥ 8, numerator not divisible by 3, numerator ≥ 5): 2s then 3.
+    """
+    if ts_beat_type <= 4:
+        return None
+    if ts_beats % 3 == 0 and ts_beats >= 6:
+        return [3] * (ts_beats // 3)
+    if ts_beats >= 5:
+        groups: list[int] = []
+        remaining = ts_beats
+        while remaining > 3:
+            groups.append(2)
+            remaining -= 2
+        groups.append(remaining)
+        return groups
+    return None
+
+
 def _staff_id(staff_number: int) -> str:
     """Map MusicXML 1-based staff number to notation staff id."""
     # Convention: staff 1 = right hand / treble = 'rh'
@@ -638,16 +659,29 @@ def parse_musicxml(xml_bytes: bytes) -> dict:
         current_tempo = _bpm_at(measure_abs_div_start, tempo_map)
 
         # ── Emit beats for song_timeline ───────────────────────────────────
-        quarter_note_dur = divisions
-        quarters_per_measure = ts_beats * 4 / ts_beat_type
-        n_quarter_beats = max(1, round(quarters_per_measure))
-        for qi in range(n_quarter_beats):
-            beat_div = measure_abs_div_start + qi * quarter_note_dur
-            beat_time = _div_to_seconds(beat_div, divisions, tempo_map)
-            beats_out.append({
-                'time': round(beat_time, 4),
-                'measure': measure_number if qi == 0 else -1,
-            })
+        _bg = _beat_groups(ts_beats, ts_beat_type)
+        if _bg is None:
+            quarter_note_dur = divisions
+            quarters_per_measure = ts_beats * 4 / ts_beat_type
+            n_quarter_beats = max(1, round(quarters_per_measure))
+            for qi in range(n_quarter_beats):
+                beat_div = measure_abs_div_start + qi * quarter_note_dur
+                beat_time = _div_to_seconds(beat_div, divisions, tempo_map)
+                beats_out.append({
+                    'time': round(beat_time, 4),
+                    'measure': measure_number if qi == 0 else -1,
+                })
+        else:
+            denom_unit_in_divisions = divisions * 4 // ts_beat_type
+            offset = 0
+            for i, group in enumerate(_bg):
+                beat_div = measure_abs_div_start + offset * denom_unit_in_divisions
+                beat_time = _div_to_seconds(beat_div, divisions, tempo_map)
+                beats_out.append({
+                    'time': round(beat_time, 4),
+                    'measure': measure_number if i == 0 else -1,
+                })
+                offset += group
 
         # ── Rehearsal marks → sections ─────────────────────────────────────
         for direction in measure_elem.findall('direction'):
@@ -828,6 +862,10 @@ def parse_musicxml(xml_bytes: bytes) -> dict:
                     grace_elem = elem.find('grace')
                     if grace_elem is not None and grace_elem.get('slash') == 'yes':
                         beat['grace_slash'] = True
+                denom_unit = divisions * 4 // ts_beat_type
+                pos_in_denom_units = (note_div - measure_abs_div_start) // denom_unit
+                if pos_in_denom_units > 0:
+                    beat['beat_pos'] = [pos_in_denom_units, ts_beat_type]
                 beat.update(beat_effects)
                 beat['notes'] = [note_dict]
                 voice_beats.append(beat)
@@ -847,6 +885,10 @@ def parse_musicxml(xml_bytes: bytes) -> dict:
         if ts != prev_ts:
             measure_dict['ts'] = ts
             prev_ts = ts
+
+        groups = _beat_groups(ts_beats, ts_beat_type)
+        if groups is not None:
+            measure_dict['beat_groups'] = groups
 
         if current_ks is not None and current_ks != prev_ks:
             measure_dict['ks'] = current_ks
