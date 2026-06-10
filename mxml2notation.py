@@ -364,15 +364,18 @@ def _collect_measure_directions(
         'words': [],
     }
     # Track a running cursor for directions within the measure.
-    # Directions don't have their own <duration>; we approximate their
-    # position as the abs_div at the point the <direction> element appears,
-    # which in practice is before the note it applies to.
+    # last_note_start captures the cursor before it advances on each note so
+    # that a <direction> appearing after its target note (post-annotation style,
+    # common in Sibelius/MuseScore exports) is attributed to that note's beat
+    # rather than the one that follows.
     cursor = abs_div_start
+    last_note_start = cursor
 
     for elem in measure:
         if elem.tag == 'note':
             dur_text = elem.findtext('duration')
             if dur_text and elem.find('chord') is None and elem.find('grace') is None:
+                last_note_start = cursor
                 cursor += int(dur_text)
         elif elem.tag == 'backup':
             dur_text = elem.findtext('duration')
@@ -383,7 +386,7 @@ def _collect_measure_directions(
             if dur_text:
                 cursor += int(dur_text)
         elif elem.tag == 'direction':
-            dir_div = cursor  # position at this direction
+            dir_div = last_note_start  # position at this direction
             for dt in elem.findall('direction-type'):
                 # Dynamics
                 dyn_elem = dt.find('dynamics')
@@ -414,14 +417,17 @@ def _active_dynamic(
     beat_div: int,
     dynamics: list[tuple[int, str]],
 ) -> str | None:
-    """Return the most recent dynamic at or before beat_div, or None."""
-    result = None
+    """Return the dynamic whose position exactly matches beat_div, or None.
+
+    sloppak dyn is a per-beat annotation recording where the symbol appears in
+    the score, not a persistent level — exact matching is intentional.
+    """
     for div, dyn in dynamics:
-        if div <= beat_div:
-            result = dyn
-        else:
+        if div == beat_div:
+            return dyn
+        if div > beat_div:
             break
-    return result
+    return None
 
 
 def _active_wedge(

@@ -18,6 +18,12 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   or a simpler fraction (e.g. `[1, 4]` for beat 2 in 4/4, not `[4, 16]`).
 - Output filename no longer doubles the `_mxml` suffix when the title extracted
   from the MusicXML already ends with the word "mxml".
+- `<direction>` elements appearing after their target note (post-annotation
+  style, common in Sibelius/MuseScore exports) are now attributed to the
+  preceding note's beat. `_collect_measure_directions` captures
+  `last_note_start` before advancing the cursor. `_active_dynamic` switched
+  from "at or before" to exact matching — `dyn` marks symbol position, not
+  a persistent dynamic level.
 - `<wavy-line>` vibrato now tracked as a span. Previously `vib: True` was
   emitted only on the note carrying `<wavy-line type="start">`. Now a
   `vibrato_open` tracker applies `vib: True` to every beat from start through
