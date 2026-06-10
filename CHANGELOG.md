@@ -8,6 +8,17 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- Compound and irregular meter beat emission. Beat ticks in `song_timeline.json`
+  now use the primary beat unit (dotted quarter for 6/8, 9/8, 12/8) rather than
+  the quarter note. `beat_groups` is written onto compound/irregular measure dicts;
+  `beat_pos` is written onto every non-downbeat notation beat.
+
+---
+
+## [0.1.0]
+
 ### Added
 
 - `mxml2notation.py` — MusicXML to notation wire format conversion library.
@@ -21,11 +32,10 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - `LICENSE` — MIT.
 - `README.md` — install instructions and compatibility note.
 
-### Known limitations (v0.1.0)
+### Known limitations
 
 - First part only — multi-part scores import only part 1.
 - Grace notes appear in the notation score but are absent from MIDI audio.
 - `grace_slash` field recorded but not yet acted on by any renderer.
 - No repeat / da capo / segno expansion.
 - No `.mxl` (compressed MusicXML) support.
-- Compound meter beat emission uses quarter-note resolution only.

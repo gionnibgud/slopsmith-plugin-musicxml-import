@@ -44,7 +44,9 @@ a `.sloppak` with notation format data (`notation_keys.json` +
           → hairpins: cre/dec from <wedge type="crescendo/diminuendo">
           → key sig: ks from <key><fifths>
           → time sig: ts from <time><beats><beat-type>
-      → song_timeline: beats + rehearsal-mark sections
+          → beat_groups: [3,3] for 6/8, [3,3,3] for 9/8, [2,3] for 5/8, etc.
+          → beat_pos: rational position within measure [num, denom] on non-downbeats
+      → song_timeline: beats (primary beat unit, not quarter-note) + sections
   → gp2midi.render_midi_to_audio() via bundled FluidSynth + GeneralUser-GS.sf2
   → mxml2notation.build_sloppak_zip()
   → dlc/sloppack/<title>_mxml.sloppak
@@ -80,7 +82,6 @@ on `feat/notation-format` supports this when `notation:` is present.
 | **Grace notes in audio** | Grace notes appear in the notation score (`grace: true` beat) but are absent from FluidSynth MIDI. Principal note timing is unaffected. |
 | **grace_slash unrendered** | Slashed vs unslashed grace notes are recorded (`grace_slash: true`) but no renderer acts on the distinction yet — alphaTab has no separate alphaTex property. |
 | **No .mxl** | Compressed MusicXML not supported — unzip before importing. |
-| **Compound meter beats** | Beat emission uses quarter-note resolution throughout. In 6/8 etc. the dotted-quarter beat unit is not expressible in notation schema v1. |
 
 ---
 
