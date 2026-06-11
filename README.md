@@ -6,8 +6,7 @@ rendering via the `staffview` plugin.
 
 ## Compatibility
 
-Requires Slopsmith with the notation format support:
-**`feat/notation-format` branch or any release that includes it.**
+**Requires:** the `feat/notation-format` branch of [gionnibgud/slopsmith](https://github.com/gionnibgud/slopsmith).
 
 The sloppak produced by this plugin uses `notation_keys.json` and
 `song_timeline.json` per sloppak-spec §5.3. It will not load on older
